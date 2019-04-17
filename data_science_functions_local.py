@@ -49,9 +49,13 @@ def set_parameters(model_selection, logger):
                                      'n_estimators'    : pd.Series([ 100]),
                                      'min_samples_leaf' : pd.Series([7])})
     
-        max_features = [20, 80, 400, 20, 80, 400, 20, 80, 400]
-        n_estimators = [ 100, 150, 300, 100, 150, 300, 100, 150, 300]
-        min_samples_leaf = [   1,   1,  1, 1, 1, 1, 1, 1, 1]
+        max_features = [5, 10, 20]
+        n_estimators = [ 100, 150, 300]
+        min_samples_leaf = [   1,   1,  1]
+        max_features = [20]
+        n_estimators = [300]
+        min_samples_leaf = [1]
+        
         param_grid = {'max_features': max_features,
                       'n_estimators' : n_estimators,
                       'min_samples_leaf' : min_samples_leaf}
@@ -84,26 +88,26 @@ def set_parameters(model_selection, logger):
 
     return(param_test_eval, param_grid)
 
-def bt_add_trend_column_monthly(data, logger):
+def bt_add_trend_column_monthly(data, year_variable, month_variable, logger):
   
     index_month_year = data\
-                         .loc[:,['dt_flight_year', 'dt_flight_month']]\
-                         .groupby(['dt_flight_year', 'dt_flight_month'])\
+                         .loc[:,[year_variable, month_variable]]\
+                         .groupby([year_variable, month_variable])\
                          .count()\
                          .reset_index()
     
     #create calendar with index for each year/month (trend index)
     calendar_tmp = pd.DataFrame(np.nan, index=np.arange(len(index_month_year)), columns=['month', 'year'])
     for i in range(len(index_month_year)):
-        calendar_tmp.loc[i, 'month'] = index_month_year.loc[i,'dt_flight_month']
-        calendar_tmp.loc[i, 'year'] = index_month_year.loc[i,'dt_flight_year']
+        calendar_tmp.loc[i, 'month'] = index_month_year.loc[i,month_variable]
+        calendar_tmp.loc[i, 'year'] = index_month_year.loc[i,year_variable]
     
     calendar_tmp = calendar_tmp.reset_index().rename(columns={'index':'trend_index'})
     
     #merge trend with the original df
     data = calendar_tmp.merge(data,
-                              left_on=['month', 'year'], 
-                              right_on=['dt_flight_month', 'dt_flight_year'],
+                              left_on=['month', 'year'],
+                              right_on=[month_variable, year_variable],
                               how='left')\
                              .drop(['month', 'year'], axis=1)
     
@@ -125,75 +129,29 @@ def data_ohe(data, ohe_variables, logger):
     """
     logger.info('One hot encoding starts using variable(s): ')
     try:
+        ohe_columns_out_names = list()
         for i in ohe_variables:
             logger.info(i)
             if i in data.columns:
                 dummies = pd.get_dummies(data[i], drop_first = True, prefix = i)
                 data = pd.concat([data, dummies], axis=1)
                 data = data.drop([i], axis=1)
-        
+                ohe_columns_out_names = ohe_columns_out_names + list(dummies.columns)
+                
     except Exception, e:
         logger.error('Problem with one hot encoding: ', exc_info=True)
         raise
 
     logger.info('One hot encoding success')
-    return data
-
-
-def set_parameters(model_selection, logger):
-    """
-    Defines parameters for the model, depeneding on the model selected.
-    Can be done using .txt file in future
-    @model_selection - selected model
-    @param_test_eval - if nfolds=1 no CV is made, param_test_eval are used as
-    parameters for model. Only evalaution using test set is conducted. It is 
-    also possible to use multiple parameters for this evaluation.
-    @param_grid - if nfolds>1 CV is made using param_grid as search grid and
-    the best set of parameters are used for model evaluation
-    """
-    if model_selection == 'rf': 
-        param_test_eval = pd.DataFrame({'max_features' : pd.Series([75]), 
-                                     'n_estimators'    : pd.Series([ 100]),
-                                     'min_samples_leaf' : pd.Series([7])})
-    
-        max_features = [20, 80, 400, 20, 80, 400, 20, 80, 400]
-        n_estimators = [ 100, 150, 300, 100, 150, 300, 100, 150, 300]
-        min_samples_leaf = [   1,   1,  1, 1, 1, 1, 1, 1, 1]
-        param_grid = {'max_features': max_features,
-                      'n_estimators' : n_estimators,
-                      'min_samples_leaf' : min_samples_leaf}
-        
-    if model_selection == 'svr': 
-        param_test_eval = pd.DataFrame({'max_features' : pd.Series([75]), 
-                                        'n_estimators'    : pd.Series([ 100]),
-                                        'min_samples_leaf' : pd.Series([7])})
-        Cs = [0.001, 0.01, 0.1, 1, 10]
-        gammas = [0.001, 0.01, 0.1, 1]
-        param_grid = {'C': Cs, 'gamma' : gammas}
-
-    if model_selection == 'xgb': 
-        param_test_eval = pd.DataFrame({'min_child_weight' : pd.Series([4]), 
-                                        'gamma'     : pd.Series([0.5]),
-                                        'subsample' : pd.Series([0.6]),
-                                        'colsample_bytree' : pd.Series([1.0]),
-                                        'max_depth' : pd.Series([4])})
-      
-        param_grid = {'min_child_weight':[4,5],
-              'gamma':[i/10.0 for i in range(3,6)],
-              'subsample':[i/10.0 for i in range(6,11)],
-              'colsample_bytree':[i/10.0 for i in range(6,11)],
-              'max_depth': [2,3,4]}    
-#            param_grid = {'min_child_weight':[4,5],
-#                          'gamma':[i/10.0 for i in range(3,4)],
-#                          'subsample':[i/10.0 for i in range(6,7)],
-#                          'colsample_bytree':[i/10.0 for i in range(6,7)],
-#                          'max_depth': [2]}   
-
-    return(param_test_eval, param_grid)
+    return data, ohe_columns_out_names
 
 
 
-def split_data_random(data,j, columns_to_drop, target_variable, use_val_set, logger):
+
+
+
+
+def split_data_random(data, j, columns_to_drop, target_variable, use_val_set, logger):
         #print ('Analizing data for All Routes for test set betweeen ' + test_start + ' and ' + test_end + ': start')
        
     X_train = np.asarray(data.query('trend_index >= 0  & trend_index <= @j')\
@@ -300,24 +258,38 @@ def add_lag_features(data, lags_num, lags_dist, lags_shift, date_column, lag_col
 def model_calc(X_train, X_test, y_train, y_test, column_names, param_test_eval, eval_dates, param_grid, nfolds, use_val_set, logger):     
         
     if nfolds==1:
+        print('no CV')
         model_def = RandomForestRegressor(n_estimators=int(param_test_eval.n_estimators),  
-                                          max_features=int(param_test_eval.max_features), 
+                                          max_features=(param_test_eval.max_features), 
                                           min_samples_leaf=int(param_test_eval.min_samples_leaf),
-                                          oob_score=True,
+                                          max_depth=int(param_test_eval.max_depth),
+                                          oob_score=False,
                                           random_state = 1,
-                                          n_jobs=4)
+                                          n_jobs=-1)
+        
+        model_def = RandomForestRegressor(n_estimators=100,  
+                                          max_features='sqrt', 
+                                          min_samples_leaf=1,
+                                          max_depth=5,
+                                          oob_score=False,
+                                          random_state = 1,
+                                          n_jobs=-1)
         model_def.fit(X_train, y_train)
         
         y_hats = model_def.predict(X_test)
         
     if nfolds>1:
-        model_def = RandomForestRegressor(n_estimators=100)
+        print('CV')
+        model_def = RandomForestRegressor(n_estimators=100,n_jobs=6)
         grid_search = GridSearchCV(model_def, param_grid, cv=nfolds)
         grid_search.fit(X_train, y_train)
-        grid_search.best_params_
+        y_hats = grid_search.predict(X_test)
         print grid_search.best_params_
+        print grid_search.cv_results_
         logger.info(grid_search.best_params_)
+        best_params = grid_search.best_params_
         
+    model_selection=='rf'
     if (model_selection=='rf'):
         print "Features sorted by their score:"
         print sorted(zip(map(lambda x: round(x, 4), model_def.feature_importances_), column_names), 
@@ -335,7 +307,7 @@ def model_calc(X_train, X_test, y_train, y_test, column_names, param_test_eval, 
     if nfolds==1:
         return(y_test)#, mean_error_model)
     else:
-        return(y_test, grid_search)
+        return(y_test, grid_search, best_params)
 
 def model_eval_mae(results_model, target_variable, pred_variable, logger):
     """
@@ -365,7 +337,7 @@ def model_eval_mape(results_model, target_variable, pred_variable, logger):
     @mape - mean absolute percentage error
     """
     results_model['ape'] = \
-    abs(results_model.loc[:, target_variable] - results_model.loc[:,pred_variable])/results_model.loc[:, target_variable]*100
+    abs((results_model.loc[:, target_variable] - results_model.loc[:,pred_variable])/results_model.loc[:, target_variable])*100
     
     results_model = results_model.replace([np.inf, -np.inf], np.nan)
     results_model = results_model.dropna(how='any')

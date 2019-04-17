@@ -1,0 +1,124 @@
+model = 0
+rf_def_1m = RandomForestRegressor(n_estimators=100,
+                                  max_features=0.5, 
+                                  min_samples_leaf=10,
+                                  oob_score=True,
+                                  random_state = 23,
+                                  n_jobs=5)
+
+rf_def_1m.fit(X_train_list[model], y_train_list[model])
+
+
+y_hats_1m = rf_def_1m.predict(X_test_list[model])
+
+y_test_list[model][col_predict] = y_hats_1m
+
+data_list[model][col_predict] = np.nan
+data_list[model].loc[y_test_list[model].index, col_predict] = y_test_list[model][col_predict]
+
+model_results = data_list[model].loc[:, cols_id+[col_target]+[col_predict]].dropna(how='any')
+
+
+
+transformed_1m = transformed_1m\
+.select('*', abs((transformed_1m[col_target] - transformed_1m[col_predict])
+                 /transformed_1m[col_target]*100)\
+          .alias(col_target+'abs_error_perc'))
+
+transformed_1m, transformed_2m, transformed_3m = df_add_error_cols(transformed_1m=data_spark_1m,
+                                                       transformed_2m=data_spark_2m,
+                                                       transformed_3m=data_spark_3m,
+                                                       col_target=col_target,
+                                                       col_predict=col_predict)
+													   
+agg_day_1m = transformed_1m.groupBy('dt_flight_date_local', 'cd_airport_pair')\
+                           .agg({'pax_seat': 'sum', 'pax_seat_pred': 'sum'})
+agg_day_1m = agg_day_1m.select('*', abs(agg_day_1m['sum(pax_seat)'] - agg_day_1m['sum(pax_seat_pred)'])\
+                               .alias('daily_abs_error'))
+agg_day_1m = agg_day_1m.select('*', abs((agg_day_1m['sum(pax_seat)'] - agg_day_1m['sum(pax_seat_pred)'])
+                                       /agg_day_1m['sum(pax_seat)']*100)\
+                       .alias('daily_abs_perc_error'))
+					   
+rf_def_1m = RandomForestRegressor(n_estimators=n_estimators,
+                                  max_features=max_features, 
+                                  min_samples_leaf=min_samples_leaf,
+                                  #max_depth=max_depth,
+                                  oob_score=True,
+                                  random_state = random_state,
+                                  n_jobs=n_jobs)
+rf_def_2m = RandomForestRegressor(n_estimators=n_estimators,
+                                  max_features=max_features, 
+                                  min_samples_leaf=min_samples_leaf,
+                                  #max_depth=max_depth,
+                                  oob_score=True,
+                                  random_state = random_state,
+                                  n_jobs=n_jobs)
+rf_def_3m = RandomForestRegressor(n_estimators=n_estimators,
+                                  max_features=max_features, 
+                                  min_samples_leaf=min_samples_leaf,
+                                  #max_depth=max_depth,
+                                  oob_score=True,
+                                  random_state = random_state,
+                                  n_jobs=n_jobs)
+#xgb_def_1m.fit(X_train_1m, y_train_1m)
+
+rf_def_1m.fit(X_train_1m, y_train_1m)
+rf_def_2m.fit(X_train_2m, y_train_2m)
+rf_def_3m.fit(X_train_3m, y_train_3m)
+
+y_hats_1m = rf_def_1m.predict(X_test_1m)
+y_test_1m[col_predict] = y_hats_1m
+data_local_1m[col_predict] = np.nan
+data_local_1m.loc[y_test_1m.index, col_predict] = y_test_1m[col_predict]
+y_hats_2m = rf_def_2m.predict(X_test_2m)
+y_test_2m[col_predict] = y_hats_2m
+data_local_2m[col_predict] = np.nan
+data_local_2m.loc[y_test_2m.index, col_predict] = y_test_2m[col_predict]
+y_hats_3m = rf_def_3m.predict(X_test_3m)
+y_test_3m[col_predict] = y_hats_3m
+data_local_3m[col_predict] = np.nan
+data_local_3m.loc[y_test_3m.index, col_predict] = y_test_3m[col_predict]
+data_spark_1m = spark.createDataFrame(data_local_1m.loc[:, cols_id+[col_target]+[col_predict]].dropna(how='any'))
+data_spark_2m = spark.createDataFrame(data_local_2m.loc[:, cols_id+[col_target]+[col_predict]].dropna(how='any'))
+data_spark_3m = spark.createDataFrame(data_local_3m.loc[:, cols_id+[col_target]+[col_predict]].dropna(how='any'))
+transformed_1m=data_spark_1m
+
+#local
+data.select(cols_features_1m + ohe_variables_in + [col_target] + cols_id).dropna(how='any')
+
+trainingData_1m_local = data_local.select(cols_features_1m + ohe_variables_in + [col_target] + cols_id).filter(col('dt_flight_date_local') <= today_date).sample(False, 0.1, 42)
+trainingData_2m_local = data_local.filter(col('dt_flight_date_local') <= today_date).sample(False, 0.1, 42)
+trainingData_3m_local = data_local.filter(col('dt_flight_date_local') <= today_date).sample(False, 0.1, 42)
+
+testData_1m_local = data_local.filter(col('dt_flight_date_local') > today_date)\
+                        .filter(col('dt_flight_date_local') <= end_this_month_date)
+testData_2m_local = data_local.filter(col('dt_flight_date_local') >= begin_next_month_date)\
+                        .filter(col('dt_flight_date_local') <= end_next_month_date)
+testData_3m_local = data_local.filter(col('dt_flight_date_local') >= begin_next2nd_month_date)\
+                        .filter(col('dt_flight_date_local') <= end_next2nd_month_date)
+						
+#trainingData_1m = allData_1m.filter('dt_flight_date_local < "2018-01-01"').sample(False, 0.2, 42)
+trainingData_1m = allData_1m.filter(col('dt_flight_date_local') <= today_date).sample(False, 0.1, 42)
+trainingData_2m = allData_2m.filter(col('dt_flight_date_local') <= today_date).sample(False, 0.1, 42)
+trainingData_3m = allData_3m.filter(col('dt_flight_date_local') <= today_date).sample(False, 0.1, 42)
+
+testData_1m = allData_1m.filter(col('dt_flight_date_local') > today_date)\
+                        .filter(col('dt_flight_date_local') <= end_this_month_date)
+testData_2m = allData_2m.filter(col('dt_flight_date_local') >= begin_next_month_date)\
+                        .filter(col('dt_flight_date_local') <= end_next_month_date)
+testData_3m = allData_3m.filter(col('dt_flight_date_local') >= begin_next2nd_month_date)\
+                        .filter(col('dt_flight_date_local') <= end_next2nd_month_date)
+
+logger.info('Model training start')
+
+logger.info('Feature columns for this month: ' + str(cols_features_1m))
+logger.info('Feature columns for the next month: ' + str(cols_features_2m))
+logger.info('Feature columns for the next next month: ' + str(cols_features_3m))
+logger.info('Target variable: ' + str(col_target))
+
+logger.info('Comments: Model with basic data, no NANs')
+
+transformed_1m = transformed_1m.select('*', abs((transformed_1m[col_target] - transformed_1m[col_predict])
+ /transformed_1m[col_target]*100)\
+.alias(col_target+'abs_error_perc'))
+

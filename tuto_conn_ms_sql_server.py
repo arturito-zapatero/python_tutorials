@@ -8,7 +8,7 @@ import pandas as pd
 import pyodbc
 
 user = 'vuelingbcn\\artur.szewczyk' 
-pwd  = 'Pimpek23$'
+pwd  = 'Pimpek23%'
 
 server = "10.218.7.178;instance=ODS"
 database = "Vueling_CALCODS"
